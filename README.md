@@ -13,6 +13,10 @@ This project implements a deceptive path planning algorithm on a mobile robotics
 - bleak
 - tripy
 - rdp
+- matplotlib
+- scipy
+- numba
+- networkx
 - A wide-angle camera, with parameters saved as `fisheye_params.npz` if there is fisheye distortion
 - AprilTags printed and placed in the physical arena
 
