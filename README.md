@@ -7,7 +7,8 @@ This project implements a deceptive path planning algorithm on a mobile robotics
 ## ⚙️ Requirements
 
 - Python 3.8 or higher
-- Install required pip modules by running 'pip install -r requirements.txt"
+- Setup a virtual environment in the directory of the cloned repo `python3 -m venv .venv`
+- Install required pip modules by running `pip install -r requirements.txt`
    - OpenCV (cv2)
    - NumPy
    - pupil_apriltags
