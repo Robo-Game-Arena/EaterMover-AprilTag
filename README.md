@@ -7,16 +7,17 @@ This project implements a deceptive path planning algorithm on a mobile robotics
 ## ⚙️ Requirements
 
 - Python 3.8 or higher
-- OpenCV (cv2)
-- NumPy
-- pupil_apriltags
-- bleak
-- tripy
-- rdp
-- matplotlib
-- scipy
-- numba
-- networkx
+- Install required pip modules by running 'pip install -r requirements.txt"
+   - OpenCV (cv2)
+   - NumPy
+   - pupil_apriltags
+   - bleak
+   - tripy
+   - rdp
+   - matplotlib
+   - scipy
+   - numba
+   - networkx
 - A wide-angle camera, with parameters saved as `fisheye_params.npz` if there is fisheye distortion
 - AprilTags printed and placed in the physical arena
 
