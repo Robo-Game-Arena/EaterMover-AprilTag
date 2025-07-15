@@ -8,6 +8,12 @@ import atexit
 import signal
 
 from global_planner import Planner
+from observer import CPUObserver, ManualObserver
+
+# ── OBSERVER CONFIG ─────────────────────────────────────────────────────────
+USE_CPU_OBSERVER = True              # True = automatic CPU, False = manual key control
+PRIOR_BELIEF    = (0.6, 0.4)         # your prior over goal-tag IDs 2 vs 3
+# ─────────────────────────────────────────────────────────────────────────────
 
 # === USER PARAMETERS ===
 TAG_SIZE_M     = 0.10               # side length of robot AprilTag in meters
@@ -78,6 +84,14 @@ class AprilTagDetector:
         self.detect_thread.daemon = True
         self.detect_thread.start()
         self.show_tags = True
+
+        # ── OBSERVER PLACEHOLDERS ───────────────────────────────────────────
+        self.observer    = None        # will init on first frame
+        self.cost1       = 0.0
+        self.cost2       = 0.0
+        self._obs_ready  = False
+        self._cost_active = False
+        # ─────────────────────────────────────────────────────────────────────
 
         # added code for planning
         self.frame_width = width
@@ -183,55 +197,103 @@ class AprilTagDetector:
     
     def run_gui(self):
         """Run the GUI visualization loop"""
-        # Create only the main window
         cv2.namedWindow('AprilTag Detector', cv2.WINDOW_NORMAL)
-        
+
         while self.running:
-            # Get the current frame and tags with lock
+            # 1) Grab the latest frame & tags
             with self.lock:
                 if not hasattr(self, 'frame'):
                     time.sleep(0.01)
                     continue
                 frame = self.frame.copy()
-                tags = self.tags.copy() if self.tags else []
-            
-            # Draw tags on the frame
+                tags  = self.tags.copy() if self.tags else []
+
+            # ── OBSERVER DYNAMIC INIT ─────────────────────────────────────────
+            if not getattr(self, '_obs_ready', False):
+                # look for goal tags 2 & 3
+                goals = {t.tag_id: t.center for t in tags if t.tag_id in (2, 3)}
+                if len(goals) == 2:
+                    # build obstacle list from tag 4 only
+                    obs_polys = [t.corners.tolist() for t in tags if t.tag_id == 4]
+
+                    goal_positions = [np.array(goals[2]), np.array(goals[3])]
+                    if USE_CPU_OBSERVER:
+                        self.observer = CPUObserver(goal_positions,
+                                                    PRIOR_BELIEF,
+                                                    obstacle_polygons=obs_polys)
+                    else:
+                        self.observer = ManualObserver(goal_positions,
+                                                       PRIOR_BELIEF)
+                    self._obs_ready = True
+                else:
+                    # still waiting for both goals
+                    cv2.imshow('AprilTag Detector', frame)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        self.running = False
+                    continue
+            # ───────────────────────────────────────────────────────────────────
+
+            # 2) Draw detections & arena as before
             if self.show_tags:
                 self.draw_tags(frame, tags)
-
-            # Draw arena on frame
             if self.curr_planner is not None:
                 self.draw_arena(frame)
-            
-            # Add text instructions
+
+            # 3) OBSERVER UPDATE (robot = any tag_id ≥ 5)
+            robot_tags = [t for t in tags if t.tag_id >= 5]
+            if robot_tags:
+                current_pos = np.array(robot_tags[0].center)
+                sigma1, sigma2, dt = self.observer.update(current_pos, time.time())
+                # only start integrating once plan is active
+                if self._cost_active:
+                    self.cost1 += sigma1 * dt
+                    self.cost2 += sigma2 * dt
+
+                # overlay allocations & costs
+                cv2.putText(frame,
+                            f"Alloc1:{sigma1:.2f} Alloc2:{sigma2:.2f}",
+                            (10, 50),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+                cv2.putText(frame,
+                            f"Cost1:{self.cost1:.1f}s Cost2:{self.cost2:.1f}s",
+                            (10, 80),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+
+            # 4) Static text & debug info
             cv2.putText(frame, "Press 'q' to quit", (10, 30),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            
-            # Display minimal debug info for performance
             if self.debug_mode:
                 cv2.putText(frame, f"Frame: {self.frame_count}", (10, 60),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            
-            # Display the main frame
+
             cv2.imshow('AprilTag Detector', frame)
-            
-            # Process key presses
+
+            # 5) Handle key presses
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 self.running = False
-                break
+
             elif key == ord('p'):
-                self.run_planner()      # Run planner in main thread
-                self.adjustDrawings()   # Adjust planner values for drawing
+                self.run_planner()
+                self.adjustDrawings()
+
             elif key == ord('t'):
-                self.show_tags = not self.show_tags             
+                self.show_tags = not self.show_tags
+
             elif key == ord('s') and self.debug_mode:
-                # Save debug image only if debug mode is enabled
-                if not os.path.exists(self.debug_dir):
-                    os.makedirs(self.debug_dir)
-                debug_path = os.path.join(self.debug_dir, f"manual_debug_{time.time()}.jpg") 
-                cv2.imwrite(debug_path, frame)
-                print(f"Saved debug image to {debug_path}")
+                # your debug‐save code…
+
+                pass
+
+            # manual‐mode adjustments
+            if not USE_CPU_OBSERVER and getattr(self, '_obs_ready', False):
+                if key == ord('a'):
+                    self.observer.adjust(+0.05)
+                elif key == ord('d'):
+                    self.observer.adjust(-0.05)
+
+        # end while
+
     
     def adjustDrawings(self):
         if self.curr_planner == None:
@@ -304,6 +366,15 @@ class AprilTagDetector:
             return
         self.path = self.curr_planner.deceptivepath
         self.has_new_plan = True
+        # NOW START COUNTING COSTS
+        self._cost_active = True
+        self.cost1 = 0.0
+        self.cost2 = 0.0
+        # also reset the observer’s history so timing/progress restarts cleanly
+        if self.observer:
+            self.observer.prev_pos  = None
+            self.observer.prev_dist = None
+            # last_time will be set on the next update call
                
         
 
