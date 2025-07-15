@@ -3,6 +3,7 @@ import threading
 import struct
 from bleak import BleakClient
 from local_planner import LocalPlanner
+import AprilTag_sensor
 from AprilTag_sensor import AprilTagDetector
 import BLE
 
