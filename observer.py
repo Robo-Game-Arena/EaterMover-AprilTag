@@ -5,20 +5,15 @@ Defines two observer classes for the deception game using pixel-based coordinate
 
 - CPUObserver: automatic allocation based on progress towards a guessed goal,
   with obstacle-aware geodesic distance via a visibility graph and Dijkstra.
+  Skips computation when robot hasn’t moved between frames (movement threshold).
 
 - ManualObserver: manual allocation adjusted via keyboard input.
 
 Usage:
     from observer import CPUObserver, ManualObserver
-
-    # goal_positions: list of two np.array([x_pix, y_pix])
-    # priors: tuple (p1, p2)
-    # obstacle_polygons: list of list of (x_pix, y_pix) tuples
-
     obs = CPUObserver(goal_positions, priors, obstacle_polygons)
     sigma1, sigma2, dt = obs.update(current_pos, timestamp)
 
-    # Or for manual:
     obs = ManualObserver(goal_positions, priors)
     obs.adjust(delta)
     sigma1, sigma2, dt = obs.update(None, timestamp)
@@ -59,26 +54,29 @@ def _segments_intersect(p1, p2, q1, q2):
 
 class CPUObserver:
     """
-    CPU-based observer that allocates points based on progress towards a guessed goal.
-    Uses pixel-based coordinates and computes obstacle-aware geodesic distances
-    via a visibility graph over start, goal, and obstacle vertices, then Dijkstra.
+    CPU-based observer allocating points based on progress toward a guessed goal.
+    Skips computation when movement between frames is negligible.
 
     Parameters:
     - goal_positions: list of two np.array([x_pix, y_pix]) for the goal tags
     - priors: tuple (p1, p2) initial belief over goals
-    - obstacle_polygons: list of list of (x_pix, y_pix) tuples for rectangular obstacles
+    - obstacle_polygons: list of lists of (x_pix, y_pix) tuples for rectangular obstacles
     """
     def __init__(self, goal_positions, priors, obstacle_polygons=None):
         self.goals = [np.array(g, dtype=float) for g in goal_positions]
         self.guess = 0 if priors[0] >= priors[1] else 1
         self.obstacles = obstacle_polygons or []
-        # History for computing progress
+        # History
         self.prev_pos = None
         self.prev_dist = None
         self.last_time = None
+        # Movement threshold (pixels)
+        self.movement_epsilon = 1e-3
+        # Last-known allocations
+        self.last_sigma1 = 0.5
+        self.last_sigma2 = 0.5
 
     def _visible(self, p, q):
-        """Return True if the segment p->q does not intersect any obstacle."""
         p = tuple(p)
         q = tuple(q)
         for poly in self.obstacles:
@@ -91,21 +89,15 @@ class CPUObserver:
         return True
 
     def _geodesic_dist(self, start, goal):
-        """Compute shortest collision-free distance from start to goal in pixel space."""
         s = tuple(start)
         g = tuple(goal)
-        # Direct line clear?
         if self._visible(s, g):
             return np.linalg.norm(start - goal)
-
-        # Build nodes: start, goal, obstacle vertices
         nodes = [s, g]
         for poly in self.obstacles:
             for v in poly:
                 nodes.append(tuple(v))
         N = len(nodes)
-
-        # Build adjacency list
         adj = {i: [] for i in range(N)}
         for i in range(N):
             for j in range(i + 1, N):
@@ -113,11 +105,9 @@ class CPUObserver:
                     d = np.linalg.norm(np.array(nodes[i]) - np.array(nodes[j]))
                     adj[i].append((j, d))
                     adj[j].append((i, d))
-
-        # Dijkstra from 0 to 1
         dist = [float('inf')] * N
         dist[0] = 0.0
-        pq = [(0.0, 0)]  # (distance, node_index)
+        pq = [(0.0, 0)]
         while pq:
             cd, u = heapq.heappop(pq)
             if u == 1:
@@ -132,51 +122,39 @@ class CPUObserver:
         return dist[1]
 
     def update(self, current_pos, timestamp):
-        """
-        Update observer with the robot's current pixel position.
-
-        Returns:
-        - sigma1, sigma2: allocations for goal1 and goal2 (sum to 1)
-        - dt: elapsed time since last update
-        """
         pos = np.array(current_pos, dtype=float)
-        # DEBUG: print incoming position
-        print(f"[DEBUG] update(): pos={pos}, prev_pos={self.prev_pos}")
+        # Skip computation if robot hasn't moved since last frame
+        if self.prev_pos is not None:
+            movement = np.linalg.norm(pos - self.prev_pos)
+            if movement < self.movement_epsilon:
+                return self.last_sigma1, self.last_sigma2, 0.0
+        # Initialize on first valid frame
         if self.prev_pos is None:
-            # First call: initialize history
             d0 = self._geodesic_dist(pos, self.goals[self.guess])
-            print(f"[DEBUG] init: guess={self.guess}, d0={d0:.2f}")
             self.prev_pos = pos.copy()
             self.prev_dist = d0
             self.last_time = timestamp
+            self.last_sigma1, self.last_sigma2 = 0.5, 0.5
             return 0.5, 0.5, 0.0
-
         # Compute dt
         dt = timestamp - self.last_time
         self.last_time = timestamp
-
         # Geodesic distances
         d_now = self._geodesic_dist(pos, self.goals[self.guess])
         prog = max(0.0, self.prev_dist - d_now)
+        # Euclidean movement
         l = np.linalg.norm(pos - self.prev_pos)
-        # DEBUG: print distance diagnostics
-        print(f"[DEBUG] prev_dist={self.prev_dist:.2f}, d_now={d_now:.2f}, prog={prog:.2f}, l={l:.2f}")
-
-
         # Allocation ratio
-        if l > 1e-6:
+        if l > self.movement_epsilon:
             sigma1 = prog / l
         else:
             sigma1 = 1.0 if prog > 0 else 0.0
         sigma1 = float(np.clip(sigma1, 0.0, 1.0))
         sigma2 = 1.0 - sigma1
-        # DEBUG: print resulting allocation
-        print(f"[DEBUG] sigma1={sigma1:.2f}, sigma2={sigma2:.2f}, dt={dt:.3f}")
-
         # Update history
         self.prev_dist = d_now
         self.prev_pos = pos.copy()
-
+        self.last_sigma1, self.last_sigma2 = sigma1, sigma2
         return sigma1, sigma2, dt
 
 
@@ -184,11 +162,6 @@ class ManualObserver:
     """
     Manual observer: operator adjusts allocation via adjust(delta);
     update() returns current allocation and zero dt.
-
-    Parameters:
-    - goal_positions: list of two positions (unused internally)
-    - priors: tuple (p1, p2) (used only to pick guess index)
-    - initial_sigma: starting allocation tuple
     """
     def __init__(self, goal_positions, priors, initial_sigma=(0.5, 0.5)):
         self.sigma1, self.sigma2 = initial_sigma
@@ -196,10 +169,8 @@ class ManualObserver:
         self.guess = 0 if priors[0] >= priors[1] else 1
 
     def update(self, *_):
-        """Returns (sigma1, sigma2, dt=0.0)."""
         return self.sigma1, self.sigma2, 0.0
 
     def adjust(self, delta):
-        """Adjust sigma1 by delta (clamped to [0,1]), sigma2 = 1 - sigma1."""
         self.sigma1 = float(np.clip(self.sigma1 + delta, 0.0, 1.0))
         self.sigma2 = 1.0 - self.sigma1
