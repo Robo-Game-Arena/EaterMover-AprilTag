@@ -140,9 +140,12 @@ class CPUObserver:
         - dt: elapsed time since last update
         """
         pos = np.array(current_pos, dtype=float)
+        # DEBUG: print incoming position
+        print(f"[DEBUG] update(): pos={pos}, prev_pos={self.prev_pos}")
         if self.prev_pos is None:
             # First call: initialize history
             d0 = self._geodesic_dist(pos, self.goals[self.guess])
+            print(f"[DEBUG] init: guess={self.guess}, d0={d0:.2f}")
             self.prev_pos = pos.copy()
             self.prev_dist = d0
             self.last_time = timestamp
@@ -156,6 +159,9 @@ class CPUObserver:
         d_now = self._geodesic_dist(pos, self.goals[self.guess])
         prog = max(0.0, self.prev_dist - d_now)
         l = np.linalg.norm(pos - self.prev_pos)
+        # DEBUG: print distance diagnostics
+        print(f"[DEBUG] prev_dist={self.prev_dist:.2f}, d_now={d_now:.2f}, prog={prog:.2f}, l={l:.2f}")
+
 
         # Allocation ratio
         if l > 1e-6:
@@ -164,6 +170,8 @@ class CPUObserver:
             sigma1 = 1.0 if prog > 0 else 0.0
         sigma1 = float(np.clip(sigma1, 0.0, 1.0))
         sigma2 = 1.0 - sigma1
+        # DEBUG: print resulting allocation
+        print(f"[DEBUG] sigma1={sigma1:.2f}, sigma2={sigma2:.2f}, dt={dt:.3f}")
 
         # Update history
         self.prev_dist = d_now
