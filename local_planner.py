@@ -4,20 +4,17 @@ from global_planner import Planner
 from AprilTag_sensor import AprilTagDetector
 from tag_ID import TagID as id
 
-# convert everything to pixels for calculations
-
-AprilTag_width = 10 # cm
+robot_AprilTag_width = 10 # cm
 
 class Parameters:
     def __init__(self, size_px, bounds):
-        ratio = size_px / AprilTag_width
+        ratio = size_px / robot_AprilTag_width
         
         self.bounds = bounds
-        self.robot_radius = ratio * 5 # px
+        self.robot_radius = 5 # centimeters
         self.dt = 0.1 # sec
-        self.v_mm = 348/2
-        self.v = ratio * self.v_mm / 10 # pix/sec
-        self.r0 = ratio * 6 # pix
+        self.v_mm = 348/2 # mm/s
+        self.r = 6 # centimeters
         self.omega_min = -np.pi/2 # rad/sec
         self.omega_max =  np.pi/2 # rad/sec
         self.n_omega = 15
@@ -27,6 +24,11 @@ class Parameters:
         self.omega = None
         self.traj = None
         self.ratio = ratio
+
+        # convert to pixels
+        self.robot_radius *= ratio
+        self.v = ratio * self.v_mm / 10
+        self.r0 *= ratio
 
 class LocalPlanner:
     def __init__(self, sensor:AprilTagDetector):
@@ -60,14 +62,11 @@ class LocalPlanner:
                 x_px, y_px = tag.center
                 R = tag.pose_R
                 theta = np.atan2(-R[0][1], R[0][0]) - np.pi/2
-        #if x_px == None:
-            #print('robot not found')
         self.z = [x_px, y_px, theta]
-        #print('lp: z = ', self.z)
         goal = self.gpath[self.goal_idx]
         if x_px is not None:
             self.n_pos += 1
-            if self.n_pos % 4 == 0:
+            if self.n_pos % 3 == 0:
                 self.sensor.points_traveled = np.reshape(np.append(self.sensor.points_traveled, [int(x_px), int(y_px)]), [-1, 2])
             # move goal until out of radius
             while True:
@@ -98,8 +97,6 @@ class LocalPlanner:
 
 
     def dwa(self, x0, y0, theta0, v, goal, parms: Parameters):
-        #print('z0: ', x0, y0, theta0)
-        #print('goal: ', goal)
         omega_all = np.linspace(parms.omega_min, parms.omega_max, parms.n_omega)
         cost_all = np.zeros(parms.n_omega)
         trajectories = []
@@ -107,7 +104,7 @@ class LocalPlanner:
             z0 = [x0, y0, theta0]
             traj = [z0]
             for _ in range(parms.prediction_horizon):
-                # use euler integration to get z0 , you can use the euler_integration function
+                # use euler integration to get z0
                 z0 = self.euler_integration([0, parms.dt], z0, [v, omega], parms)
                 traj.append(z0)
             traj = np.array(traj)
