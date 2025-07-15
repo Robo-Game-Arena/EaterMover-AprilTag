@@ -277,11 +277,11 @@ class AprilTagDetector:
                 cv2.putText(frame,
                             f"Alloc1:{sigma1:.2f} Alloc2:{sigma2:.2f}",
                             (10, 50),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 3)
                 cv2.putText(frame,
                             f"Cost1:{self.cost1:.1f}s Cost2:{self.cost2:.1f}s",
                             (10, 80),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255,255,255), 2)
+                            cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 3)
 
             # 4) Static text & debug info
             cv2.putText(frame, "Press 'q' to quit", (10, 30),
