@@ -4,19 +4,24 @@ from global_planner import Planner
 from AprilTag_sensor import AprilTagDetector
 from tag_ID import TagID as id
 
+# === USER PARAMETERS ===
 robot_AprilTag_width = 10 # cm
+robot_velocity = 174 # mm/sec
+robot_radius = 5 # cm
+robot_angular_velocity = np.pi/2 # rad/sec
+# =======================
 
 class Parameters:
     def __init__(self, size_px, bounds):
         ratio = size_px / robot_AprilTag_width
         
         self.bounds = bounds
-        self.robot_radius = 5 # centimeters
+        self.robot_radius = robot_radius
+        self.v_mm = robot_velocity
+        self.omega_min = -robot_angular_velocity
+        self.omega_max =  robot_angular_velocity
         self.dt = 0.1 # sec
-        self.v_mm = 348/2 # mm/s
         self.r = 6 # centimeters
-        self.omega_min = -np.pi/2 # rad/sec
-        self.omega_max =  np.pi/2 # rad/sec
         self.n_omega = 15
         self.prediction_horizon = 10
         self.pause = 0.001
@@ -145,7 +150,7 @@ class LocalPlanner:
         self.sensor.curr_goal = self.gpath[self.goal_idx]
         self.sensor.dwa_path = dwa_path[:, 0:2]
 
-        return omega_all[best_index], trajectories[best_index]
+        return 0.9 * omega_all[best_index], trajectories[best_index]
 
     def euler_integration(self, tspan, z0, u, parms):
         v = min(u[0], parms.v)
