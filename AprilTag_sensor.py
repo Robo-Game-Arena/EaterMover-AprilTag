@@ -208,8 +208,16 @@ class AprilTagDetector:
         """Run the GUI visualization loop"""
         cv2.namedWindow('AprilTag Detector', cv2.WINDOW_NORMAL)
 
+        # Precompute some GUI layout constants
+        BAR_HEIGHT    = 40           # height of allocation slider
+        BOX_WIDTH     = 120          # width of each cost box
+        BOX_HEIGHT    = 60           # height of each cost box
+        BOX_Y_OFFSET  = BAR_HEIGHT + 10
+        FONT          = cv2.FONT_HERSHEY_SIMPLEX
+        SLIDER_COLORS = [(0,0,255), (255,0,0)]  # BGR: red, blue
+
         while self.running:
-            # 1) Grab the latest frame & tags
+            # 1) Grab frame & detections
             with self.lock:
                 if not hasattr(self, 'frame'):
                     time.sleep(0.01)
@@ -217,14 +225,11 @@ class AprilTagDetector:
                 frame = self.frame.copy()
                 tags  = self.tags.copy() if self.tags else []
 
-            # ── OBSERVER DYNAMIC INIT ─────────────────────────────────────────
-            if not getattr(self, '_obs_ready', False):
-                # look for goal tags 2 & 3
-                goals = {t.tag_id: t.center for t in tags if t.tag_id in (2, 3)}
-                if len(goals) == 2:
-                    # build obstacle list from tag 4 only
-                    obs_polys = [t.corners.tolist() for t in tags if t.tag_id == 4]
-
+            # 2) Dynamic init of observer (as before)
+            if not self._obs_ready:
+                goals = {t.tag_id: t.center for t in tags if t.tag_id in (2,3)}
+                if len(goals)==2:
+                    obs_polys = [t.corners.tolist() for t in tags if t.tag_id==4]
                     goal_positions = [np.array(goals[2]), np.array(goals[3])]
                     if USE_CPU_OBSERVER:
                         self.observer = CPUObserver(goal_positions,
@@ -235,88 +240,85 @@ class AprilTagDetector:
                                                        PRIOR_BELIEF)
                     self._obs_ready = True
                 else:
-                    # still waiting for both goals
                     cv2.imshow('AprilTag Detector', frame)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        self.running = False
+                    if cv2.waitKey(1)&0xFF==ord('q'):
+                        self.running=False
                     continue
-            # ───────────────────────────────────────────────────────────────────
 
-            # 2) Draw detections & arena as before
+            # 3) Draw the arena/path/robot (as before)
             if self.show_tags:
                 self.draw_tags(frame, tags)
             if self.curr_planner is not None:
                 self.draw_arena(frame)
 
-            # 3) OBSERVER UPDATE + FRAME‐GATE (robot = any tag_id ≥ 5)
+            # 5) Observer‐update gated on new frame (as we added earlier)
             if self.frame_count != self._last_update_frame:
-                # new frame: run update
                 self._last_update_frame = self.frame_count
-
                 robot_tags = [t for t in tags if t.tag_id >= 5]
                 if robot_tags:
-                    current_pos = np.array(robot_tags[0].center)
-                    sigma1, sigma2, dt = self.observer.update(current_pos, time.time())
+                    cp = np.array(robot_tags[0].center)
+                    σ1, σ2, dt = self.observer.update(cp, time.time())
                     if self._cost_active:
-                        self.cost1 += sigma1 * dt
-                        self.cost2 += sigma2 * dt
-
-                    # stash values for redraws until next frame
-                    self._last_sigma1 = sigma1
-                    self._last_sigma2 = sigma2
+                        self.cost1 += σ1 * dt
+                        self.cost2 += σ2 * dt
+                    self._last_sigma1 = σ1
+                    self._last_sigma2 = σ2
                     self._last_cost1  = self.cost1
                     self._last_cost2  = self.cost2
             else:
-                # no new frame: reuse last values
-                sigma1, sigma2 = self._last_sigma1, self._last_sigma2
+                σ1, σ2 = self._last_sigma1, self._last_sigma2
                 self.cost1, self.cost2 = self._last_cost1, self._last_cost2
 
-            # overlay allocations & costs
+            # 6) Draw allocation slider at top
+            w = frame.shape[1]
+            w1 = int(w * self._last_sigma1)
+            # red portion
+            cv2.rectangle(frame, (0,0), (w1, BAR_HEIGHT), SLIDER_COLORS[0], -1)
+            # blue portion
+            cv2.rectangle(frame, (w1,0), (w, BAR_HEIGHT), SLIDER_COLORS[1], -1)
+            # text labels
+            pct1 = f"{self._last_sigma1*100:.1f}%"
+            pct2 = f"{self._last_sigma2*100:.1f}%"
+            for idx, (pct, start_x) in enumerate(((pct1, 0), (pct2, w1))):
+                (tw, th), _ = cv2.getTextSize(pct, FONT, 0.8, 2)
+                txt_x = start_x + ((w1 if idx==0 else (w - w1)) - tw)//2 + (0 if idx==0 else w1)
+                txt_y = BAR_HEIGHT//2 + th//2
+                cv2.putText(frame, pct, (txt_x, txt_y), FONT, 0.8, (0,0,0), 2)
 
-                # overlay allocations & costs
-                cv2.putText(frame,
-                            f"Alloc1:{sigma1:.2f} Alloc2:{sigma2:.2f}",
-                            (10, 50),
-                            cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 3)
-                cv2.putText(frame,
-                            f"Cost1:{self.cost1:.1f}s Cost2:{self.cost2:.1f}s",
-                            (10, 80),
-                            cv2.FONT_HERSHEY_SIMPLEX, 2, (255,255,255), 3)
+            # 7) Draw cost boxes
+            # red box for goal1
+            x1 = 50
+            y1 = BOX_Y_OFFSET
+            cv2.rectangle(frame, (x1,y1), (x1+BOX_WIDTH,y1+BOX_HEIGHT),
+                          SLIDER_COLORS[0], -1)
+            # blue box for goal2
+            x2 = frame.shape[1] - BOX_WIDTH - 50
+            y2 = BOX_Y_OFFSET
+            cv2.rectangle(frame, (x2,y2), (x2+BOX_WIDTH,y2+BOX_HEIGHT),
+                          SLIDER_COLORS[1], -1)
+            # overlay cost text
+            cost1_txt = f"{self._last_cost1:.1f}"
+            cost2_txt = f"{self._last_cost2:.1f}"
+            for txt, (bx, by) in ((cost1_txt,(x1,y1)), (cost2_txt,(x2,y2))):
+                (tw, th), _ = cv2.getTextSize(txt, FONT, 1.0, 3)
+                txt_x = bx + (BOX_WIDTH - tw)//2
+                txt_y = by + (BOX_HEIGHT + th)//2
+                cv2.putText(frame, txt, (txt_x, txt_y), FONT, 1.0, (0,0,0), 3)
 
-            # 4) Static text & debug info
-            cv2.putText(frame, "Press 'q' to quit", (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-            if self.debug_mode:
-                cv2.putText(frame, f"Frame: {self.frame_count}", (10, 60),
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-
+            # 8) Final show + key handling (unchanged)
             cv2.imshow('AprilTag Detector', frame)
-
-            # 5) Handle key presses
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 self.running = False
-
             elif key == ord('p'):
                 self.run_planner()
                 self.adjustDrawings()
-
             elif key == ord('t'):
                 self.show_tags = not self.show_tags
-
-            elif key == ord('s') and self.debug_mode:
-                # your debug‐save code…
-
-                pass
-
-            # manual‐mode adjustments
-            if not USE_CPU_OBSERVER and getattr(self, '_obs_ready', False):
-                if key == ord('a'):
-                    self.observer.adjust(+0.05)
-                elif key == ord('d'):
-                    self.observer.adjust(-0.05)
-
-        # end while
+            # manual mode
+            if not USE_CPU_OBSERVER and self._obs_ready:
+                if key==ord('a'): self.observer.adjust(+0.05)
+                elif key==ord('d'): self.observer.adjust(-0.05)
 
     
     def adjustDrawings(self):
@@ -356,9 +358,13 @@ class AprilTagDetector:
     def draw_tags(self, frame, tags):
         """Draw detected tags on the frame"""
         for tag in tags:
-            # Draw tag outline
+            # choose BGR color
+            if   tag.tag_id == 2: clr = (0, 0, 255)   # red for goal1
+            elif tag.tag_id == 3: clr = (255, 0, 0)   # blue for goal2
+            else:                 clr = (0, 255, 0)   # green for everything else
+
             corners = tag.corners.astype(int)
-            cv2.polylines(frame, [corners], True, (0, 255, 0), 2)
+            cv2.polylines(frame, [corners], True, clr, 2)
             
             # Draw tag center
             center = tuple(int(x) for x in tag.center)
