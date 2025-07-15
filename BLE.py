@@ -12,8 +12,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 from local_planner import LocalPlanner
 
-ESP32_SERVICE_UUID = "0000S001-0000-1000-8000-00805f9b34fb"
-ESP32_CHAR_UUID    = "0000C001-0000-1000-8000-00805f9b34fb"
+# === USER PARAMETERS ===
+ESP32_SERVICE_UUID = "0000S001-0000-1000-8000-00805f9b34fb" # find using phone app: nRF Connect 
+ESP32_CHAR_UUID    = "0000C001-0000-1000-8000-00805f9b34fb" # find using phone app: nRF Connect 
+SEND_INTERVAL      = 0.2 # interval between updating velocities in seconds
+# =======================
 
 class BLEBridge_FAMP:
     def __init__(self, planner: LocalPlanner, ble_address): 
@@ -24,7 +27,7 @@ class BLEBridge_FAMP:
         self.reconnect_attempts = 0
         self.max_reconnect_attempts = 5 # Max attempts for initial connection
         self.initial_reconnect_delay = 2 # seconds
-        self.send_interval = 0.2 # Reduced send interval for faster updates
+        self.send_interval = SEND_INTERVAL
 
     async def connect_ble(self):
         """Attempts to connect to BLE device. Returns True on success, False on failure."""
