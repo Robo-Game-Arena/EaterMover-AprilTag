@@ -29,10 +29,6 @@ class AprilTagDetector:
             print("Error: Could not open camera")
             raise Exception("Failed to open camera")
         
-        # Set moderate resolution for better performance
-        #self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)  # Reduced from 1280
-        #self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)  # Reduced from 720
-        
         # Get actual camera parameters
         width = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
         height = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
@@ -57,7 +53,7 @@ class AprilTagDetector:
             quad_sigma=self.quad_sigma,
             refine_edges=1,
             decode_sharpening=self.decode_sharpening,
-            debug=0 # Enable debug mode to see what's happening
+            debug=0
         )
         
         # Tag data storage
@@ -147,9 +143,6 @@ class AprilTagDetector:
             # Convert to grayscale (only use one method for speed)
             gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             
-            # Apply light preprocessing (reduced processing for speed)
-            #gray = cv2.convertScaleAbs(gray, alpha=1.1, beta=5)
-            
             self.frame_count += 1
             
             # Detect AprilTags
@@ -165,21 +158,6 @@ class AprilTagDetector:
                 self.frame = img.copy()
                 self.tags = detected_tags
             
-            # Print tag information less frequently for better performance
-            #if self.frame_count % 5 == 0:  # Print every 5 frames instead of every frame
-                #self.print_tag_info()
-            
-            # Save successful frames less frequently
-            #if detected_tags and self.debug_mode and self.frame_count % 30 == 0:
-            #    if not os.path.exists(self.debug_dir):
-            #        os.makedirs(self.debug_dir)
-            #    cv2.imwrite(os.path.join(self.debug_dir, f"success_{time.time()}.jpg"), frame)
-            #    self.last_detection_time = time.time()
-            #elif detected_tags:
-            #    self.last_detection_time = time.time()
-            
-            # Save current robot position
-
             # Sleep to maintain approximately 0.1s intervals
             elapsed = time.time() - start_time
             sleep_time = max(0, 1/40 - elapsed)
@@ -243,10 +221,8 @@ class AprilTagDetector:
                 self.running = False
                 break
             elif key == ord('p'):
-                #self.pause_detection()  # Pause detection thread
                 self.run_planner()      # Run planner in main thread
                 self.adjustDrawings()   # Adjust planner values for drawing
-                #self.resume_detection() # Restart detection
             elif key == ord('t'):
                 self.show_tags = not self.show_tags             
             elif key == ord('s') and self.debug_mode:
@@ -289,7 +265,6 @@ class AprilTagDetector:
         if self.dwa_path is not None:
             cv2.polylines(frame, [self.dwa_path.astype(int)], False, (255, 100, 100), 4)
         if len(self.points_traveled) > 1 :
-            #print(self.points_traveled)
             cv2.polylines(frame, np.int32([self.points_traveled]), False, (0, 0, 255), 3)
 
     def draw_tags(self, frame, tags):
