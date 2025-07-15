@@ -6,6 +6,7 @@ Defines two observer classes for the deception game using pixel-based coordinate
 - CPUObserver: automatic allocation based on progress towards a guessed goal,
   with obstacle-aware geodesic distance via a visibility graph and Dijkstra.
   Skips computation when robot hasn’t moved between frames (movement threshold).
+  Stops timer and further updates once the robot reaches its guessed goal.
 
 - ManualObserver: manual allocation adjusted via keyboard input.
 
@@ -56,6 +57,7 @@ class CPUObserver:
     """
     CPU-based observer allocating points based on progress toward a guessed goal.
     Skips computation when movement between frames is negligible.
+    Stops updates once the robot reaches its guessed goal.
 
     Parameters:
     - goal_positions: list of two np.array([x_pix, y_pix]) for the goal tags
@@ -72,6 +74,10 @@ class CPUObserver:
         self.last_time = None
         # Movement threshold (pixels)
         self.movement_epsilon = 1e-3
+        # Goal reach threshold
+        self.goal_epsilon = 2.0  # in pixels
+        # Finished flag
+        self._finished = False
         # Last-known allocations
         self.last_sigma1 = 0.5
         self.last_sigma2 = 0.5
@@ -122,15 +128,24 @@ class CPUObserver:
         return dist[1]
 
     def update(self, current_pos, timestamp):
+        # DEBUG: incoming values
+        print(f"[DEBUG] CPUObserver.update: pos={current_pos}, finished={self._finished}")
+        # Stop if goal reached
+        if self._finished:
+            print("[DEBUG] Goal already reached; no further updates.")
+            return self.last_sigma1, self.last_sigma2, 0.0
+
         pos = np.array(current_pos, dtype=float)
-        # Skip computation if robot hasn't moved since last frame
+        # Skip if no movement
         if self.prev_pos is not None:
             movement = np.linalg.norm(pos - self.prev_pos)
+            print(f"[DEBUG] movement={movement:.3f}px")
             if movement < self.movement_epsilon:
                 return self.last_sigma1, self.last_sigma2, 0.0
         # Initialize on first valid frame
         if self.prev_pos is None:
             d0 = self._geodesic_dist(pos, self.goals[self.guess])
+            print(f"[DEBUG] init: guess={self.guess}, dist={d0:.2f}px")
             self.prev_pos = pos.copy()
             self.prev_dist = d0
             self.last_time = timestamp
@@ -142,8 +157,13 @@ class CPUObserver:
         # Geodesic distances
         d_now = self._geodesic_dist(pos, self.goals[self.guess])
         prog = max(0.0, self.prev_dist - d_now)
-        # Euclidean movement
         l = np.linalg.norm(pos - self.prev_pos)
+        print(f"[DEBUG] prev_dist={self.prev_dist:.2f}, d_now={d_now:.2f}, prog={prog:.2f}, l={l:.2f}, dt={dt:.3f}")
+        # Check goal reach
+        if d_now <= self.goal_epsilon:
+            print(f"[DEBUG] Goal reached (d_now={d_now:.2f}px) - stopping observer.")
+            self._finished = True
+            return self.last_sigma1, self.last_sigma2, 0.0
         # Allocation ratio
         if l > self.movement_epsilon:
             sigma1 = prog / l
@@ -151,6 +171,7 @@ class CPUObserver:
             sigma1 = 1.0 if prog > 0 else 0.0
         sigma1 = float(np.clip(sigma1, 0.0, 1.0))
         sigma2 = 1.0 - sigma1
+        print(f"[DEBUG] sigma1={sigma1:.2f}, sigma2={sigma2:.2f}")
         # Update history
         self.prev_dist = d_now
         self.prev_pos = pos.copy()
@@ -169,8 +190,10 @@ class ManualObserver:
         self.guess = 0 if priors[0] >= priors[1] else 1
 
     def update(self, *_):
+        print(f"[DEBUG] ManualObserver.update: sigma1={self.sigma1:.2f}, sigma2={self.sigma2:.2f}")
         return self.sigma1, self.sigma2, 0.0
 
     def adjust(self, delta):
         self.sigma1 = float(np.clip(self.sigma1 + delta, 0.0, 1.0))
         self.sigma2 = 1.0 - self.sigma1
+        print(f"[DEBUG] ManualObserver.adjust: new sigma1={self.sigma1:.2f}")
