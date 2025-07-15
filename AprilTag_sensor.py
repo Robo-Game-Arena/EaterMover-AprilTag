@@ -10,7 +10,7 @@ import signal
 from global_planner import Planner
 
 # === USER PARAMETERS ===
-TAG_SIZE_M     = 0.10               # side length of AprilTag in meters
+TAG_SIZE_M     = 0.10               # side length of robot AprilTag in meters
 CALIB_FILE     = "fisheye_params.npz"
 SRC            = "/dev/video0"
 RESOLUTION     = (2560, 1440)
