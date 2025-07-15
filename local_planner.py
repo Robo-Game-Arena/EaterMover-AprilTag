@@ -21,7 +21,7 @@ class Parameters:
         self.omega_min = -robot_angular_velocity
         self.omega_max =  robot_angular_velocity
         self.dt = 0.1 # sec
-        self.r = 6 # centimeters
+        self.r0 = 6 # centimeters
         self.n_omega = 15
         self.prediction_horizon = 10
         self.pause = 0.001
