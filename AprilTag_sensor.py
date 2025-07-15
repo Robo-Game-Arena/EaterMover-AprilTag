@@ -101,6 +101,15 @@ class AprilTagDetector:
         self.has_new_plan = False
         self.dwa_path = None
         self.curr_goal = None
+
+        # ── FRAME‐GATING FOR OBSERVER ───────────────────────────────────────
+        # only update observer once per new frame
+        self._last_update_frame = -1
+        self._last_sigma1       = 0.5
+        self._last_sigma2       = 0.5
+        self._last_cost1        = 0.0
+        self._last_cost2        = 0.0
+        # ────
     
     def init_camera(self):
         # Initialize camera
@@ -239,15 +248,30 @@ class AprilTagDetector:
             if self.curr_planner is not None:
                 self.draw_arena(frame)
 
-            # 3) OBSERVER UPDATE (robot = any tag_id ≥ 5)
-            robot_tags = [t for t in tags if t.tag_id >= 5]
-            if robot_tags:
-                current_pos = np.array(robot_tags[0].center)
-                sigma1, sigma2, dt = self.observer.update(current_pos, time.time())
-                # only start integrating once plan is active
-                if self._cost_active:
-                    self.cost1 += sigma1 * dt
-                    self.cost2 += sigma2 * dt
+            # 3) OBSERVER UPDATE + FRAME‐GATE (robot = any tag_id ≥ 5)
+            if self.frame_count != self._last_update_frame:
+                # new frame: run update
+                self._last_update_frame = self.frame_count
+
+                robot_tags = [t for t in tags if t.tag_id >= 5]
+                if robot_tags:
+                    current_pos = np.array(robot_tags[0].center)
+                    sigma1, sigma2, dt = self.observer.update(current_pos, time.time())
+                    if self._cost_active:
+                        self.cost1 += sigma1 * dt
+                        self.cost2 += sigma2 * dt
+
+                    # stash values for redraws until next frame
+                    self._last_sigma1 = sigma1
+                    self._last_sigma2 = sigma2
+                    self._last_cost1  = self.cost1
+                    self._last_cost2  = self.cost2
+            else:
+                # no new frame: reuse last values
+                sigma1, sigma2 = self._last_sigma1, self._last_sigma2
+                self.cost1, self.cost2 = self._last_cost1, self._last_cost2
+
+            # overlay allocations & costs
 
                 # overlay allocations & costs
                 cv2.putText(frame,
