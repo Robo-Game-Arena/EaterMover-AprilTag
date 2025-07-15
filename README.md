@@ -46,7 +46,7 @@ This project implements a deceptive path planning algorithm on a mobile robotics
 ## 🎮 Controls (in GUI window)
 
 - Press **q** to quit
-- Press **p** to run the global planner
+- Press **p** to begin planning and navigation
 - Press **t** to toggle tag annotations
 - Press **s** to save the current frame (debug mode only)
 
@@ -69,12 +69,13 @@ These tag IDs must match the physical AprilTags placed in the arena.
 
 1. Place the AprilTags in the arena according to the ID mapping.
 2. Ensure the camera is calibrated and `fisheye_params.npz` is available.
-3. Power on the ESP32 robot and ensure it is advertising over BLE.
-4. Run the program by executing this command in your terminal:
-
+3. Ensure the ESP32 robot is calibrated with the files in the arduino-motor-control repository.
+4. Power on the robot and ensure it is advertising over BLE.
+5. Run the program by executing this command in your terminal:
+   ```bash
    python3 main.py
-
-5. A window will open showing the live camera feed with tag overlays and planned paths.
+   ```
+6. A window will open showing the live camera feed with tag overlays and planned paths.
 
 ---
 
@@ -84,14 +85,16 @@ These tag IDs must match the physical AprilTags placed in the arena.
 - Hold AprilTags flat and clearly within view of the camera.
 - Use tags from the `tag25h9` family, printed at high quality.
 - Verify the camera calibration file is accurate for your camera setup.
+- Verify that the user parameters in [AprilTag_sensor.py](AprilTag_sensor.py), [BLE.py](BLE.py), [local_planner.py](local_planner), and [main.py](main.py) are accurate for your setup.
 
 ---
 
 ## 📝 Notes
 
+- We ran into an issue where BLE communication didn't work when SSH'd into the Raspberry Pi 5.
 - The system is multithreaded: one thread for AprilTag detection, one for BLE communication, and the main thread for GUI.
+- Latency greatly impacts the robots ability to path-follow smoothly.
 - Path planning uses game-theoretic deception via PBNE (Perfect Bayesian Nash Equilibrium).
-- BLE sends velocity updates every 200 milliseconds.
 - The Voronoi diagram is dynamically built and optimized to respect arena boundaries and obstacles.
 - If planning fails (e.g., missing tags or obstacles), the robot will stop or fallback safely.
 
