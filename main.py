@@ -6,6 +6,10 @@ from local_planner import LocalPlanner
 from AprilTag_sensor import AprilTagDetector
 import BLE
 
+# === USER PARAMETERS ===
+robot_MAC_address = "14:2b:2f:cc:ed:72"
+# =======================
+
 if __name__ == "__main__":
     
     # Create your detector (threaded)
@@ -17,8 +21,7 @@ if __name__ == "__main__":
     # Create BLE bridge
     ble_bridge = BLE.BLEBridge_FAMP(
         lp, 
-        #ble_address="08:b6:1f:7c:70:06"
-        ble_address="14:2b:2f:cc:ed:72"
+        ble_address=robot_MAC_address
     )
     
     # Start BLE in a separate thread
