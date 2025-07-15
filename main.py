@@ -19,7 +19,7 @@ if __name__ == "__main__":
     lp = LocalPlanner(tag_detector)
     
     # Create BLE bridge
-    ble_bridge = BLE.BLEBridge_FAMP(
+    ble_bridge = BLE.BLEBridge(
         lp, 
         ble_address=robot_MAC_address
     )
