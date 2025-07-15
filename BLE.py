@@ -18,7 +18,7 @@ ESP32_CHAR_UUID    = "0000C001-0000-1000-8000-00805f9b34fb" # find using phone a
 SEND_INTERVAL      = 0.2 # interval between updating velocities in seconds
 # =======================
 
-class BLEBridge_FAMP:
+class BLEBridge:
     def __init__(self, planner: LocalPlanner, ble_address): 
         self.planner = planner
         self.ble_address = ble_address
