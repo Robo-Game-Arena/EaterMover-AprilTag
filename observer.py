@@ -57,7 +57,7 @@ class CPUObserver:
         self.prev_dist = None
         self.last_time = None
         self.movement_epsilon = 1e-3
-        self.goal_epsilon = 30.0
+        self.goal_epsilon = 100.0
         self._finished = False
         self.last_sigma1 = 0.5
         self.last_sigma2 = 0.5
