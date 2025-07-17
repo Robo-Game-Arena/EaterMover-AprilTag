@@ -5,7 +5,7 @@ from AprilTag_sensor import AprilTagDetector
 from tag_ID import TagID as id
 
 # === USER PARAMETERS ===
-robot_AprilTag_width = 10 # cm
+robot_AprilTag_width = 4 # cm
 robot_velocity = 174 # mm/sec
 robot_radius = 5 # cm
 robot_angular_velocity = np.pi/2 # rad/sec
