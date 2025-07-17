@@ -257,12 +257,18 @@ class AprilTagDetector:
                 robot_tags = [t for t in tags if t.tag_id >= 5]
                 if robot_tags:
                     cp = np.array(robot_tags[0].center)
-                    σ1, σ2, dt = self.observer.update(cp, time.time())
+
+                    sigma1, sigma2, dt = self.observer.update(current_pos, time.time())
+                    # if the observer just hit the goal, deactivate cost tracking
+                    if self.observer._finished:
+                        self._cost_active = False
+
+                    # otherwise accumulate cost while active
                     if self._cost_active:
-                        self.cost1 += σ1 * dt
-                        self.cost2 += σ2 * dt
-                    self._last_sigma1 = σ1
-                    self._last_sigma2 = σ2
+                        self.cost1 += sigma1 * dt
+                        self.cost2 += sigma2 * dt
+                    self._last_sigma1 = sigma1
+                    self._last_sigma2 = sigma2
                     self._last_cost1  = self.cost1
                     self._last_cost2  = self.cost2
             else:
