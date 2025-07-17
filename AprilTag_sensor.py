@@ -258,7 +258,7 @@ class AprilTagDetector:
                 if robot_tags:
                     cp = np.array(robot_tags[0].center)
 
-                    sigma1, sigma2, dt = self.observer.update(current_pos, time.time())
+                    sigma1, sigma2, dt = self.observer.update(cp, time.time())
                     # if the observer just hit the goal, deactivate cost tracking
                     if self.observer._finished:
                         self._cost_active = False
@@ -272,7 +272,7 @@ class AprilTagDetector:
                     self._last_cost1  = self.cost1
                     self._last_cost2  = self.cost2
             else:
-                σ1, σ2 = self._last_sigma1, self._last_sigma2
+                sigma1, sigma2 = self._last_sigma1, self._last_sigma2
                 self.cost1, self.cost2 = self._last_cost1, self._last_cost2
 
             # 6) Draw allocation slider at top
