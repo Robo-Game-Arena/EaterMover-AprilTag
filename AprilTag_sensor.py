@@ -16,7 +16,7 @@ PRIOR_BELIEF    = (0.6, 0.4)         # your prior over goal-tag IDs 2 vs 3
 # ─────────────────────────────────────────────────────────────────────────────
 
 # === USER PARAMETERS ===
-TAG_SIZE_M     = 0.10               # side length of robot AprilTag in meters
+TAG_SIZE_M     = 0.04              # side length of robot AprilTag in meters
 CALIB_FILE     = "fisheye_params.npz"
 SRC            = "/dev/video0"
 RESOLUTION     = (2560, 1440)
